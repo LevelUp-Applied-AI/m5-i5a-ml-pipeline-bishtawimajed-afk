@@ -7,13 +7,13 @@ configurations using cross-validation with ColumnTransformer + Pipeline.
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate, cross_val_predict
 from sklearn.linear_model import LogisticRegression, RidgeClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, PolynomialFeatures
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -112,17 +112,16 @@ def evaluate_models(models, X, y, cv=5, random_state=42):
         
         results_list.append({
             "Model": name,
-            "Mean Accuracy": cv_results["test_accuracy"].mean(),
-            "Std": cv_results["test_accuracy"].std(),
-            "Mean Precision": cv_results["test_precision"].mean(),
-            "Mean Recall": cv_results["test_recall"].mean(),
-            "Mean F1": cv_results["test_f1"].mean()
+            "accuracy_mean": cv_results["test_accuracy"].mean(),
+            "accuracy_std": cv_results["test_accuracy"].std(),
+            "precision_mean": cv_results["test_precision"].mean(),
+            "recall_mean": cv_results["test_recall"].mean(),
+            "f1_mean": cv_results["test_f1"].mean(),
+            "Std": cv_results["test_accuracy"].std()
         })
     
     return pd.DataFrame(results_list)
 
-
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 def final_evaluation(pipeline, X_train, X_test, y_train, y_test):
     # TODO: Fit the pipeline on (X_train, y_train), predict on X_test,
@@ -157,9 +156,6 @@ between CV and Test results confirms the model is ready for deployment.
     print(recommendation)
 
 
-    from sklearn.model_selection import cross_val_predict
-from sklearn.metrics import classification_report
-
 def run_per_class_analysis(models, X, y):
     # Tier 1: Generate a detailed classification report for each real model
     print("\n" + "="*40)
@@ -177,7 +173,6 @@ def run_per_class_analysis(models, X, y):
         print(f"\n>>> Classification Report for: {name}")
         print(classification_report(y, y_pred))
 
-        from sklearn.preprocessing import PolynomialFeatures
 
 def build_engineered_pipeline(model_object):
     # Tier 2: Refactor into a factory that adds interaction terms (e.g., tenure * charges)
@@ -246,12 +241,13 @@ if __name__ == "__main__":
             # Task 4: Run cross-validation
             results = evaluate_models(models, X_train, y_train)
             
-            # استدعاء الدالة التي عدلناها (سطر 142) لطباعة الجدول والتوصية
             recommend_model(results)
 
-            # Task 5: اختيار أفضل موديل وعمل الاختبار النهائي
+            # Task 5: final evaluation on the held-out test set.
+            # TODO: Select the best model from the results DataFrame
+            #       (e.g., highest f1_mean among non-dummy rows)
             real_models = results[~results['Model'].str.contains('Dummy')]
-            best_model_name = real_models.loc[real_models['Mean F1'].idxmax(), 'Model']
+            best_model_name = real_models.loc[real_models['f1_mean'].idxmax(), 'Model']
             best_pipeline = models[best_model_name]
 
             print(f"\n--- Final Evaluation for Best Model: {best_model_name} ---")
@@ -260,23 +256,16 @@ if __name__ == "__main__":
             for metric, value in test_metrics.items():
                 print(f"Test {metric.capitalize()}: {value:.4f}")
 
-                # Trigger Tier 1
-    run_per_class_analysis(models, X_train, y_train)
-    
-    # Trigger Tier 2
-    print("\n--- Testing Feature Engineering (Tier 2) ---")
-    eng_model = build_engineered_pipeline(LogisticRegression(max_iter=1000, class_weight='balanced'))
-    eng_cv = cross_validate(eng_model, X_train, y_train, cv=5, scoring='f1')
-    print(f"Mean F1 with Interaction Features: {eng_cv['test_score'].mean():.4f}")
-    
-    # Trigger Tier 3
-    print("\n--- Testing Custom CV Engine (Tier 3) ---")
-    manual_scores = custom_stratified_cv(X_train, y_train, models['LogReg_default'], k=5)
-    print(f"Custom CV Mean F1 Score: {manual_scores.mean():.4f}") 
-
-                # Task 5: final evaluation on the held-out test set.
-                # TODO: Select the best model from the results DataFrame
-                #       (e.g., highest f1_mean among non-dummy rows), look it
-                #       up in the models dict, call final_evaluation with the
-                #       split, and print the final test-set metrics. Compare
-                #       them to the CV estimates.
+            # Trigger Tier 1
+            run_per_class_analysis(models, X_train, y_train)
+            
+            # Trigger Tier 2
+            print("\n--- Testing Feature Engineering (Tier 2) ---")
+            eng_model = build_engineered_pipeline(LogisticRegression(max_iter=1000, class_weight='balanced'))
+            eng_cv = cross_validate(eng_model, X_train, y_train, cv=5, scoring='f1')
+            print(f"Mean F1 with Interaction Features: {eng_cv['test_score'].mean():.4f}")
+            
+            # Trigger Tier 3
+            print("\n--- Testing Custom CV Engine (Tier 3) ---")
+            manual_scores = custom_stratified_cv(X_train, y_train, models['LogReg_default'], k=5)
+            print(f"Custom CV Mean F1 Score: {manual_scores.mean():.4f}")
